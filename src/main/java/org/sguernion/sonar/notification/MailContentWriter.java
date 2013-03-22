@@ -10,6 +10,8 @@ public class MailContentWriter
 
     private StringBuilder content;
 
+    private static final String BR = "<br />";
+
     /**
      * 
      */
@@ -37,7 +39,8 @@ public class MailContentWriter
         content.append( string );
         content.append( "</td><td>" );
         content.append( string2 );
-        content.append( "</tr></table><br/>" );
+        content.append( "</tr></table>" );
+        content.append( BR );
         return this;
     }
 
@@ -59,7 +62,8 @@ public class MailContentWriter
         content.append( "</td><td>" );
         content.append( block2.getContent() );
         content.append( "</tr>" );
-        content.append( "</table><br/>" );
+        content.append( "</table>" );
+        content.append( BR );
         return this;
     }
 
@@ -79,16 +83,15 @@ public class MailContentWriter
      */
     public MailContentWriter addBr()
     {
-        addHtml( "<br />" );
-        return this;
+        return addHtml( BR );
     }
 
     /**
      * @param string
      */
-    public void addImage( String src )
+    public MailContentWriter addImage( String src )
     {
-        addHtml( "<img src=\"" + src + "\" />" );
+        return addHtml( "<img src=\"" + src + "\" />" );
     }
 
     /**
@@ -102,6 +105,8 @@ public class MailContentWriter
 
     public class Block
     {
+
+
         String title;
 
         StringBuilder sb = new StringBuilder();
@@ -127,7 +132,7 @@ public class MailContentWriter
          */
         public Block br()
         {
-            sb.append( "<br />" );
+            sb.append( BR );
             return this;
         }
 

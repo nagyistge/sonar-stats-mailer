@@ -30,7 +30,9 @@ import org.sonar.wsclient.services.TimeMachineQuery;
  * @author sguernio
  */
 public class SonarStats
+    implements Props
 {
+    private static final String TRUE = "true";
 
     private static final String SEP = ":";
 
@@ -42,8 +44,7 @@ public class SonarStats
 
     private String resource;
 
-    /**
-     */
+
     private SonarStats()
     {
     }
@@ -56,9 +57,9 @@ public class SonarStats
     {
         controleProperties( props );
         SonarStats stat =
-            SonarStats.connect( HTTP + props.getProperty( "sonar.host" ) + SEP + props.getProperty( "sonar.port" ),
-                props.getProperty( "sonar.user" ), props.getProperty( "sonar.password" ),
-                props.getProperty( "sonar.resource" ) );
+            SonarStats.connect( HTTP + props.getProperty( SONAR_HOST ) + SEP + props.getProperty( SONAR_PORT ),
+                props.getProperty( SONAR_USER ), props.getProperty( SONAR_PASSWORD ),
+                props.getProperty( SONAR_RESOURCE ) );
         stat.props = props;
         return stat;
     }
@@ -74,23 +75,26 @@ public class SonarStats
         assert ( props.containsKey( "content.violations" ) );
         assert ( props.containsKey( "content.duplications" ) );
 
-        assert ( props.containsKey( "jenkins.host" ) );
-        assert ( props.containsKey( "jenkins.user" ) );
-        assert ( props.containsKey( "jenkins.password" ) );
-        assert ( props.containsKey( "jenkins.port" ) );
+        assert ( props.containsKey( JENKINS_HOST ) );
+        assert ( props.containsKey( JENKINS_USER ) );
+        assert ( props.containsKey( JENKINS_PASSWORD ) );
+        assert ( props.containsKey( JENKINS_PORT ) );
+        assert ( props.containsKey( JENKINS_JOB ) );
 
-        assert ( props.containsKey( "sonar.host" ) );
-        assert ( props.containsKey( "sonar.user" ) );
-        assert ( props.containsKey( "sonar.password" ) );
-        assert ( props.containsKey( "sonar.port" ) );
-        assert ( props.containsKey( "sonar.resource" ) );
-        assert ( props.containsKey( "sonar.days" ) );
+        assert ( props.containsKey( SONAR_HOST ) );
+        assert ( props.containsKey( SONAR_USER ) );
+        assert ( props.containsKey( SONAR_PASSWORD ) );
+        assert ( props.containsKey( SONAR_PORT ) );
+        assert ( props.containsKey( SONAR_RESOURCE ) );
+        assert ( props.containsKey( SONAR_DAYS ) );
 
-        assert ( props.containsKey( "mail.from" ) );
-        assert ( props.containsKey( "mail.smtp.host" ) );
-        assert ( props.containsKey( "mail.smtp.auth" ) );
-        assert ( props.containsKey( "mail.to" ) );
-        assert ( props.containsKey( "mail.titre" ) );
+        assert ( props.containsKey( MAIL_FROM ) );
+        assert ( props.containsKey( MAIL_SMTP_HOST ) );
+        assert ( props.containsKey( MAIL_SMTP_AUTH ) );
+        assert ( props.containsKey( MAIL_TO ) );
+        assert ( props.containsKey( MAIL_TITRE ) );
+        assert ( props.containsKey( MAIL_PASSWORD ) );
+        assert ( props.containsKey( MAIL_USER ) );
     }
 
     public static SonarStats connect( String url, String login, String password, String resource )
@@ -123,7 +127,6 @@ public class SonarStats
         query.setTo( now );
 
         TimeMachine struts = sonar.find( query );
-
         return struts;
     }
 
@@ -193,18 +196,18 @@ public class SonarStats
             {
                 protected PasswordAuthentication getPasswordAuthentication()
                 {
-                    return new PasswordAuthentication( props.getProperty( "mail.user" ),
-                        props.getProperty( "mail.password" ) );
+                    return new PasswordAuthentication( props.getProperty( MAIL_USER ),
+                        props.getProperty( MAIL_PASSWORD ) );
                 }
             };
             Session session = Session.getInstance( props, auth );
 
             Message message = new MimeMessage( session );
 
-            String mailTo = props.getProperty( "mail.to" );
-            if ( mailTo.contains( ";" ) )
+            String mailTo = props.getProperty( MAIL_TO );
+            if ( mailTo.contains( MAIL_SEP ) )
             {
-                String[] to = mailTo.split( ";" );
+                String[] to = mailTo.split( MAIL_SEP );
                 Address[] adresses = new Address[to.length];
                 for ( int i = 0; i < to.length; i++ )
                 {
@@ -220,7 +223,7 @@ public class SonarStats
             }
 
             message.setSubject( sujet );
-            message.setContent( content, "text/html" );
+            message.setContent( content, MAIL_MINE );
 
             Transport.send( message );
 
@@ -240,7 +243,7 @@ public class SonarStats
     {
         MailContentWriter mailWriter = new MailContentWriter();
 
-        int nbDays = Integer.valueOf( props.getProperty( "sonar.days" ) );
+        int nbDays = Integer.valueOf( props.getProperty( SONAR_DAYS ) );
 
         String duree = "depuis la semaine dernière";
 
@@ -249,31 +252,90 @@ public class SonarStats
             duree = "depuis " + nbDays + " jours";
         }
 
-        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + HTTP + props.getProperty( "sonar.host" ) + SEP
-            + props.getProperty( "sonar.port" ) + "/dashboard/index/1?did=1\">Sonar</a> " + duree + ".</p>" );
+        String resourceId =
+            sonar.find( ResourceQuery.createForMetrics( resource, new String[] {} ) ).getId().toString();
+
+        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + HTTP + props.getProperty( SONAR_HOST ) + SEP
+            + props.getProperty( SONAR_PORT ) + "/dashboard/index/" + resourceId + "?did=1\">Sonar</a> " + duree
+            + ".</p>" );
         mailWriter.addHtml( "<br />" );
 
         TimeMachine timeM = getTimeMachine( nbDays );
 
-        if ( props.getProperty( "content.violations" ).equals( "true" ) )
+        contentViolations( mailWriter, timeM );
+
+        contentTests( mailWriter, timeM );
+
+        contentDuplications( mailWriter, timeM );
+
+        contentTestsGraph( mailWriter, duree );
+
+        contentCoverage( mailWriter, duree );
+
+        return mailWriter.getContent();
+    }
+
+    /**
+     * @param mailWriter
+     * @param duree
+     */
+    private void contentCoverage( MailContentWriter mailWriter, String duree )
+    {
+        if ( props.getProperty( "content.coverage.graph" ).equals( TRUE ) )
         {
-            Block blockViolation = mailWriter.createBlock( getHtmlTitle( "Violations" ) );
-
-            blockViolation.add( getLigne( timeM, "violations", "" ) );
-            blockViolation.add( getHtmlTitle( "Taux de conformité" ) );
-            blockViolation.add( getLigne( timeM, "violations_density", "" ) ).br();
-
-            Block blockViolationL2 = mailWriter.createBlock( "" );
-            blockViolationL2.add( getLigne( timeM, "blocker_violations", " Bloquant" ) ).br();
-            blockViolationL2.add( getLigne( timeM, "critical_violations", " Critique" ) ).br();
-            blockViolationL2.add( getLigne( timeM, "major_violations", " Majeur" ) ).br();
-            blockViolationL2.add( getLigne( timeM, "minor_violations", " Mineur" ) ).br();
-            blockViolationL2.add( getLigne( timeM, "info_violations", " Info" ) ).br();
-
-            mailWriter.addBlock( blockViolation, blockViolationL2 );
+            mailWriter.addBr().addHtml( "<p>Evolution de la couverture de tests " + duree + ".</p>" );
+            mailWriter.addBr().addImage(
+                HTTP + props.getProperty( JENKINS_HOST ) + SEP + props.getProperty( JENKINS_PORT )
+                    + "/job/"+props.getProperty( JENKINS_JOB )+"/cobertura/graph" );
         }
+    }
 
-        if ( props.getProperty( "content.tests" ).equals( "true" ) )
+    /**
+     * @param mailWriter
+     * @param duree
+     */
+    private void contentTestsGraph( MailContentWriter mailWriter, String duree )
+    {
+        if ( props.getProperty( "content.tests.graph" ).equals( TRUE ) )
+        {
+            mailWriter.addHtml( "<p>Tendance des résultats des tests " + duree + ".</p>" );
+            mailWriter.addBr().addImage(
+                HTTP + props.getProperty( JENKINS_HOST ) + SEP + props.getProperty( JENKINS_PORT )
+                    + "/job/"+props.getProperty( JENKINS_JOB )+"/test/trend" );
+        }
+    }
+
+    /**
+     * @param mailWriter
+     * @param timeM
+     */
+    private void contentDuplications( MailContentWriter mailWriter, TimeMachine timeM )
+    {
+        if ( props.getProperty( "content.duplications" ).equals( TRUE ) )
+        {
+            Block blockComment = mailWriter.createBlock( getHtmlTitle( "Commentaires" ) );
+            blockComment.add( getLigne( timeM, "comment_lines_density", "", true ) ).br();
+            blockComment.add( getLigne( timeM, "comment_lines", " lignes", true ) ).br();
+            blockComment.add( getLigne( timeM, "public_documented_api_density", " API documentée", true ) ).br();
+            blockComment.add( getLigne( timeM, "public_undocumented_api", " API non documentée" ) ).br();
+
+            Block block = mailWriter.createBlock( getHtmlTitle( "Duplications" ) );
+            block.add( getLigne( timeM, "duplicated_lines_density", "" ) ).br();
+            block.add( getLigne( timeM, "duplicated_lines", " lignes" ) ).br();
+            block.add( getLigne( timeM, "duplicated_blocks", " blocs" ) ).br();
+            block.add( getLigne( timeM, "duplicated_files", " fichiers", true ) ).br();
+
+            mailWriter.addBlock( blockComment, block );
+        }
+    }
+
+    /**
+     * @param mailWriter
+     * @param timeM
+     */
+    private void contentTests( MailContentWriter mailWriter, TimeMachine timeM )
+    {
+        if ( props.getProperty( "content.tests" ).equals( TRUE ) )
         {
             Block blockCouverture = mailWriter.createBlock( getHtmlTitle( "Couverture de code" ) );
             blockCouverture.add( getLigne( timeM, "coverage", "", true ) ).br();
@@ -290,41 +352,31 @@ public class SonarStats
 
             mailWriter.addBlock( blockCouverture, blockTests );
         }
+    }
 
-        if ( props.getProperty( "content.duplications" ).equals( "true" ) )
+    /**
+     * @param mailWriter
+     * @param timeM
+     */
+    private void contentViolations( MailContentWriter mailWriter, TimeMachine timeM )
+    {
+        if ( props.getProperty( "content.violations" ).equals( TRUE ) )
         {
-            Block blockComment = mailWriter.createBlock( getHtmlTitle( "Commentaires" ) );
-            blockComment.add( getLigne( timeM, "comment_lines_density", "", true ) ).br();
-            blockComment.add( getLigne( timeM, "comment_lines", " lignes", true ) ).br();
-            blockComment.add( getLigne( timeM, "public_documented_api_density", " API documentée", true ) ).br();
-            blockComment.add( getLigne( timeM, "public_undocumented_api", " API non documentée" ) ).br();
+            Block blockViolation = mailWriter.createBlock( getHtmlTitle( "Violations" ) );
 
-            Block block = mailWriter.createBlock( getHtmlTitle( "Duplications" ) );
-            block.add( getLigne( timeM, "duplicated_lines_density", "" ) ).br();
-            block.add( getLigne( timeM, "duplicated_lines", " lignes" ) ).br();
-            block.add( getLigne( timeM, "duplicated_blocks", " blocs" ) ).br();
-            block.add( getLigne( timeM, "duplicated_files", " fichiers", true ) ).br();
+            blockViolation.add( getLigne( timeM, "violations", "" ) );
+            blockViolation.add( getHtmlTitle( "Taux de conformité" ) );
+            blockViolation.add( getLigne( timeM, "violations_density", "" ) ).br();
 
-            mailWriter.addBlock( blockComment, block );
+            Block blockViolationL2 = mailWriter.createBlock( "" );
+            blockViolationL2.add( getLigne( timeM, "blocker_violations", " Bloquant" ) ).br();
+            blockViolationL2.add( getLigne( timeM, "critical_violations", " Critique" ) ).br();
+            blockViolationL2.add( getLigne( timeM, "major_violations", " Majeur" ) ).br();
+            blockViolationL2.add( getLigne( timeM, "minor_violations", " Mineur" ) ).br();
+            blockViolationL2.add( getLigne( timeM, "info_violations", " Info" ) ).br();
+
+            mailWriter.addBlock( blockViolation, blockViolationL2 );
         }
-
-        if ( props.getProperty( "content.tests.graph" ).equals( "true" ) )
-        {
-            mailWriter.addHtml( "<p>Tendance des résultats des tests " + duree + ".</p>" );
-            mailWriter.addBr().addImage(
-                HTTP + props.getProperty( "jenkins.host" ) + SEP + props.getProperty( "jenkins.port" )
-                    + "/job/"+props.getProperty( "jenkins.job" )+"/test/trend" );
-        }
-
-        if ( props.getProperty( "content.coverage.graph" ).equals( "true" ) )
-        {
-            mailWriter.addBr().addHtml( "<p>Evolution de la couverture de tests " + duree + ".</p>" );
-            mailWriter.addBr().addImage(
-                HTTP + props.getProperty( "jenkins.host" ) + SEP + props.getProperty( "jenkins.port" )
-                    + "/job/"+props.getProperty( "jenkins.job" )+"/cobertura/graph" );
-        }
-
-        return mailWriter.getContent();
     }
 
     enum Format

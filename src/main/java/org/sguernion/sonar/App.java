@@ -42,6 +42,7 @@ public class App
         }
         catch ( Exception e )
         {
+            e.printStackTrace();
             System.err.println( "Erreur " + e.getMessage() );
         }
     }
