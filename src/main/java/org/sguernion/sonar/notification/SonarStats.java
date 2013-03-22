@@ -17,6 +17,7 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.sguernion.sonar.notification.MailContentWriter.Block;
 import org.sonar.wsclient.Sonar;
 import org.sonar.wsclient.services.Measure;
@@ -32,42 +33,60 @@ import org.sonar.wsclient.services.TimeMachineQuery;
 public class SonarStats
     implements Props
 {
-    private static final String TRUE = "true";
+    protected static final String TRUE = "true";
 
-    private static final String SEP = ":";
+    protected static final String SEP = ":";
 
-    private static final String HTTP = "http://";
+    protected static final String HTTP = "http://";
 
-    private Sonar sonar;
+    protected Sonar sonar;
 
-    private Properties props;
+    protected PropertiesConfiguration props;
 
-    private String resource;
+    protected MailContentWriter mailWriter = new MailContentWriter();
 
+    protected ProjetConfiguration project;
 
-    private SonarStats()
+    protected SonarStats()
     {
     }
 
     /**
      * @param props
+     * @param resource2
      * @return
      */
-    public static SonarStats connect( Properties props )
+    public static SonarStats connect( PropertiesConfiguration props )
     {
         controleProperties( props );
-        SonarStats stat =
-            SonarStats.connect( HTTP + props.getProperty( SONAR_HOST ) + SEP + props.getProperty( SONAR_PORT ),
-                props.getProperty( SONAR_USER ), props.getProperty( SONAR_PASSWORD ),
-                props.getProperty( SONAR_RESOURCE ) );
-        stat.props = props;
+
+        String[] ressources = props.getStringArray( Props.SONAR_RESOURCE );
+        SonarStats stat = null;
+        if ( ressources.length > 1 )
+        {
+            stat = SonarMultiStats.connect( props, ressources );
+
+        }
+        else
+        {
+            stat =
+                SonarStats.connect( HTTP + props.getString( SONAR_HOST ) + SEP + props.getString( SONAR_PORT ),
+                    props.getString( SONAR_USER ), props.getString( SONAR_PASSWORD ), ressources[0] );
+            stat.props = props;
+            stat.project.job = props.getString( JENKINS_JOB );
+            stat.project.duplications = props.getBoolean( "content.duplications" );
+            stat.project.coverage = props.getBoolean( "content.coverage.graph" );
+            stat.project.testsGraph = props.getBoolean( "content.tests.graph" );
+            stat.project.tests = props.getBoolean( "content.tests" );
+            stat.project.violations = props.getBoolean( "content.violations" );
+        }
         return stat;
     }
 
     /**
      * @param props2
      */
-    private static void controleProperties( Properties props )
+    private static void controleProperties( PropertiesConfiguration props )
     {
         assert ( props.containsKey( "content.coverage.graph" ) );
         assert ( props.containsKey( "content.tests.graph" ) );
@@ -97,29 +116,34 @@ public class SonarStats
         assert ( props.containsKey( MAIL_USER ) );
     }
 
-    public static SonarStats connect( String url, String login, String password, String resource )
+    private static SonarStats connect( String url, String login, String password, String resource )
     {
         SonarStats stat = new SonarStats();
         stat.sonar = Sonar.create( url, login, password );
-        stat.resource = resource;
+        stat.project = new ProjetConfiguration();
+        stat.project.resource = resource;
         return stat;
     }
 
-    public List<Measure> get()
+    protected List<Measure> get()
     {
-        Resource struts = sonar.find( ResourceQuery.createForMetrics( resource, KEYS ) );
+        Resource struts = sonar.find( ResourceQuery.createForMetrics( project.resource, KEYS ) );
         return struts.getMeasures();
     }
 
-    public TimeMachine getTimeMachine( int nbJours )
+    private TimeMachine getTimeMachine( String pResource, int nbJours )
     {
-        return getTimeMachine( nbJours, KEYS );
+        return getTimeMachine( pResource, nbJours, KEYS );
     }
 
-    public TimeMachine getTimeMachine( int nbJours, String[] keys )
+    public TimeMachine getTimeMachine( String pResource, int nbJours, String[] keys )
     {
+        if ( pResource == null )
+        {
+            pResource = project.resource;
+        }
         Date now = new Date();
-        TimeMachineQuery query = TimeMachineQuery.createForMetrics( resource, keys );
+        TimeMachineQuery query = TimeMachineQuery.createForMetrics( pResource, keys );
         Calendar calendar = new GregorianCalendar();
         calendar.setTime( now );
         calendar.add( Calendar.DATE, -nbJours );
@@ -130,9 +154,9 @@ public class SonarStats
         return struts;
     }
 
-    public Measure get( String key )
+    private Measure get( String key )
     {
-        Resource struts = sonar.find( ResourceQuery.createForMetrics( resource, KEYS ) );
+        Resource struts = sonar.find( ResourceQuery.createForMetrics( project.resource, KEYS ) );
         return struts.getMeasure( key );
     }
 
@@ -180,15 +204,20 @@ public class SonarStats
      * @param string
      * @return
      */
-    public String getFormattedValue( String key )
+    private String getFormattedValue( String key )
     {
         return get( key ).getFormattedValue();
+    }
+
+    public SonarStats sendMail( String sujet )
+    {
+        return sendMail( sujet, getContentHtml() );
     }
 
     /**
      * @param outStream
      */
-    public SonarStats sendMail( String sujet, String content )
+    protected SonarStats sendMail( String sujet, String content )
     {
         try
         {
@@ -196,15 +225,20 @@ public class SonarStats
             {
                 protected PasswordAuthentication getPasswordAuthentication()
                 {
-                    return new PasswordAuthentication( props.getProperty( MAIL_USER ),
-                        props.getProperty( MAIL_PASSWORD ) );
+                    return new PasswordAuthentication( props.getString( MAIL_USER ), props.getString( MAIL_PASSWORD ) );
                 }
             };
-            Session session = Session.getInstance( props, auth );
+
+            Properties mailProps = new Properties();
+            mailProps.put( "mail.smtp.auth", props.getString( "mail.smtp.auth" ) );
+            mailProps.put( "mail.smtp.starttls.enable", props.getString( "mail.smtp.starttls.enable" ) );
+            mailProps.put( "mail.smtp.host", props.getString( "mail.smtp.host" ) );
+
+            Session session = Session.getInstance( mailProps, auth );
 
             Message message = new MimeMessage( session );
 
-            String mailTo = props.getProperty( MAIL_TO );
+            String mailTo = props.getString( MAIL_TO );
             if ( mailTo.contains( MAIL_SEP ) )
             {
                 String[] to = mailTo.split( MAIL_SEP );
@@ -239,11 +273,9 @@ public class SonarStats
      * @param sonnarS
      * @return
      */
-    public String getContentHtml()
+    protected void buildContent( ProjetConfiguration project )
     {
-        MailContentWriter mailWriter = new MailContentWriter();
-
-        int nbDays = Integer.valueOf( props.getProperty( SONAR_DAYS ) );
+        int nbDays = props.getInt( SONAR_DAYS );
 
         String duree = "depuis la semaine dernière";
 
@@ -252,15 +284,15 @@ public class SonarStats
             duree = "depuis " + nbDays + " jours";
         }
 
-        String resourceId =
-            sonar.find( ResourceQuery.createForMetrics( resource, new String[] {} ) ).getId().toString();
+        project.index =
+            sonar.find( ResourceQuery.createForMetrics( project.resource, new String[] {} ) ).getId().toString();
 
-        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + HTTP + props.getProperty( SONAR_HOST ) + SEP
-            + props.getProperty( SONAR_PORT ) + "/dashboard/index/" + resourceId + "?did=1\">Sonar</a> " + duree
+        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + HTTP + props.getString( SONAR_HOST ) + SEP
+            + props.getString( SONAR_PORT ) + "/dashboard/index/" + project.index + "?did=1\">Sonar</a> " + duree
             + ".</p>" );
-        mailWriter.addHtml( "<br />" );
+        mailWriter.addBr();
 
-        TimeMachine timeM = getTimeMachine( nbDays );
+        TimeMachine timeM = getTimeMachine( project.resource, nbDays );
 
         contentViolations( mailWriter, timeM );
 
@@ -271,7 +303,11 @@ public class SonarStats
         contentTestsGraph( mailWriter, duree );
 
         contentCoverage( mailWriter, duree );
+    }
 
+    public String getContentHtml()
+    {
+        buildContent( project );
         return mailWriter.getContent();
     }
 
@@ -281,12 +317,12 @@ public class SonarStats
      */
     private void contentCoverage( MailContentWriter mailWriter, String duree )
     {
-        if ( props.getProperty( "content.coverage.graph" ).equals( TRUE ) )
+        if ( project.coverage )
         {
             mailWriter.addBr().addHtml( "<p>Evolution de la couverture de tests " + duree + ".</p>" );
             mailWriter.addBr().addImage(
-                HTTP + props.getProperty( JENKINS_HOST ) + SEP + props.getProperty( JENKINS_PORT )
-                    + "/job/"+props.getProperty( JENKINS_JOB )+"/cobertura/graph" );
+                HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
+                    + "/cobertura/graph" );
         }
     }
 
@@ -296,12 +332,12 @@ public class SonarStats
      */
     private void contentTestsGraph( MailContentWriter mailWriter, String duree )
     {
-        if ( props.getProperty( "content.tests.graph" ).equals( TRUE ) )
+        if ( project.testsGraph )
         {
             mailWriter.addHtml( "<p>Tendance des résultats des tests " + duree + ".</p>" );
             mailWriter.addBr().addImage(
-                HTTP + props.getProperty( JENKINS_HOST ) + SEP + props.getProperty( JENKINS_PORT )
-                    + "/job/"+props.getProperty( JENKINS_JOB )+"/test/trend" );
+                HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
+                    + "/test/trend" );
         }
     }
 
@@ -311,7 +347,7 @@ public class SonarStats
      */
     private void contentDuplications( MailContentWriter mailWriter, TimeMachine timeM )
     {
-        if ( props.getProperty( "content.duplications" ).equals( TRUE ) )
+        if ( project.duplications )
         {
             Block blockComment = mailWriter.createBlock( getHtmlTitle( "Commentaires" ) );
             blockComment.add( getLigne( timeM, "comment_lines_density", "", true ) ).br();
@@ -335,7 +371,7 @@ public class SonarStats
      */
     private void contentTests( MailContentWriter mailWriter, TimeMachine timeM )
     {
-        if ( props.getProperty( "content.tests" ).equals( TRUE ) )
+        if ( project.tests )
         {
             Block blockCouverture = mailWriter.createBlock( getHtmlTitle( "Couverture de code" ) );
             blockCouverture.add( getLigne( timeM, "coverage", "", true ) ).br();
@@ -360,7 +396,7 @@ public class SonarStats
      */
     private void contentViolations( MailContentWriter mailWriter, TimeMachine timeM )
     {
-        if ( props.getProperty( "content.violations" ).equals( TRUE ) )
+        if ( project.violations )
         {
             Block blockViolation = mailWriter.createBlock( getHtmlTitle( "Violations" ) );
 
@@ -384,17 +420,17 @@ public class SonarStats
         TIME, PERCENT, NOMBRE;
     }
 
-    public String getLigne( TimeMachine timeM, String key, String text )
+    private String getLigne( TimeMachine timeM, String key, String text )
     {
         return getLigne( timeM, key, text, false );
     }
 
-    public String getLigne( TimeMachine timeM, String key, String text, boolean negativeIndice )
+    private String getLigne( TimeMachine timeM, String key, String text, boolean negativeIndice )
     {
         return getLigne( timeM, key, text, negativeIndice, null );
     }
 
-    public String getLigne( TimeMachine timeM, String key, String text, boolean negativeIndice, Format format )
+    private String getLigne( TimeMachine timeM, String key, String text, boolean negativeIndice, Format format )
     {
         return getFormattedValue( key ) + text + getCellValDeltaHtml( timeM, key, negativeIndice, format );
     }

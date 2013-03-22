@@ -3,8 +3,8 @@ package org.sguernion.sonar;
 import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.Properties;
 
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.sguernion.sonar.notification.SonarStats;
 import org.sonar.wsclient.services.TimeMachine;
 import org.sonar.wsclient.services.TimeMachineCell;
@@ -15,7 +15,7 @@ public class App
 
     public static void main( String[] args )
     {
-        Properties props = null;
+        PropertiesConfiguration props = null;
 
         try
         {
@@ -30,12 +30,14 @@ public class App
 
             if ( args.length == 1 && args[0] == "-t" )
             {
-                System.out.println( getContentText( sonnarS ) );
+
+                    System.out.println( getContentText( sonnarS ) );
+
             }
             else
             {
                 System.out.println( "send Mail" );
-                sonnarS.sendMail( props.getProperty( "mail.titre" ), sonnarS.getContentHtml() );
+                sonnarS.sendMail( props.getString( "mail.titre" ) );
                 System.out.println( "envoyé" );
             }
 
@@ -60,7 +62,7 @@ public class App
         outStream.println( "- Sonar Stats TimeMachine -" );
         outStream.println( "---------------------------" );
 
-        TimeMachine timeM = sonnarS.getTimeMachine( 10, SonarStats.KEYS );
+        TimeMachine timeM = sonnarS.getTimeMachine( null, 10, SonarStats.KEYS );
 
         int[] taille = new int[timeM.getColumns().length];
         int i = 0;

@@ -1,14 +1,13 @@
 package org.sguernion.sonar;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.URL;
-import java.util.Properties;
+
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
 
 /**
  * @author sguernion
- *
  */
 public class PropsUtils
 {
@@ -17,35 +16,20 @@ public class PropsUtils
     }
 
     /**
-     * Load a properties file from the classpath
-     * 
-     * @param propsName
-     * @return Properties
-     * @throws Exception
-     */
-    public static Properties load( String propsName )
-        throws Exception
-    {
-        Properties props = new Properties();
-        URL url = ClassLoader.getSystemResource( propsName );
-        props.load( url.openStream() );
-        return props;
-    }
-
-    /**
      * Load a Properties File
      * 
      * @param propsFile
      * @return Properties
      * @throws IOException
+     * @throws ConfigurationException
      */
-    public static Properties load( File propsFile )
-        throws IOException
+    public static PropertiesConfiguration load( File propsFile )
+        throws ConfigurationException
     {
-        Properties props = new Properties();
-        FileInputStream fis = new FileInputStream( propsFile );
-        props.load( fis );
-        fis.close();
+        PropertiesConfiguration props = new PropertiesConfiguration();
+
+        props.load( propsFile );
+
         return props;
     }
 
