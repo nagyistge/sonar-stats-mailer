@@ -1,7 +1,5 @@
 package org.sguernion.sonar.notification;
 
-
-
 /**
  * @author sguernio
  */
@@ -9,6 +7,10 @@ public class MailContentWriter
 {
 
     private StringBuilder content;
+
+    private boolean onglet;
+
+    private StringBuilder ongletContent;
 
     private static final String BR = "<br />";
 
@@ -18,29 +20,44 @@ public class MailContentWriter
     public MailContentWriter()
     {
         content = new StringBuilder();
-        content.append( "<html><body>" );
+        ongletContent = new StringBuilder();
     }
 
     /**
-     * @return
+     * @param job
      */
-    public String getHtmlTitle( String title )
+    public MailContentWriter addOnglet( String job )
     {
-        return "<p><span style='font-size:12pt;color:#444444'><b>" + title + "</b></span><p>";
+
+        if ( !onglet )
+        {
+            // TODO init onglet
+            ongletContent.append( "<ul>" );
+            onglet = true;
+        }
+        else
+        {
+            addHtml( "</div>" );
+        }
+        ongletContent.append( "<li onclick='display(" + job + ")'>" );
+        ongletContent.append( job );
+        ongletContent.append( "</li>" );
+        addHtml( "<div id='" + job + "' style='display:none;'>" );
+        // TODO onglet
+
+        return this;
     }
 
     /**
      * @param string
      * @param string2
      */
-    public MailContentWriter addBlock( String string, String string2 )
+    public MailContentWriter addBlock( String text1, String text2 )
     {
-        content.append( "<table style='width:700px;border:1px solid black'><tr><td>" );
-        content.append( string );
-        content.append( "</td><td>" );
-        content.append( string2 );
-        content.append( "</tr></table>" );
-        content.append( BR );
+        addHtml( "<table style='width:700px;border:1px solid black'><tr><td>" );
+        addHtml( text1 ).addHtml( "</td><td>" );
+        addHtml( text2 ).addHtml( "</tr></table>" );
+        addBr();
         return this;
     }
 
@@ -50,20 +67,12 @@ public class MailContentWriter
      */
     public MailContentWriter addBlock( Block block1, Block block2 )
     {
-        content.append( "<table style='width:700px;border:1px solid black'>" );
-        content.append( "<tr><td>" );
-        content.append( block1.title );
-        content.append( "</td><td>" );
-        content.append( block2.title );
-        content.append( "</tr>" );
+        addHtml( "<table style='width:700px;border:1px solid black'>" );
+        addHtml( "<tr><td>" ).addHtml( block1.title ).addHtml( "</td><td>" ).addHtml( block2.title ).addHtml( "</tr>" );
 
-        content.append( "<tr><td>" );
-        content.append( block1.getContent() );
-        content.append( "</td><td>" );
-        content.append( block2.getContent() );
-        content.append( "</tr>" );
-        content.append( "</table>" );
-        content.append( BR );
+        addHtml( "<tr><td>" ).addHtml( block1.getContent() ).addHtml( "</td><td>" ).addHtml( block2.getContent() )
+            .addHtml( "</tr>" );
+        addHtml( "</table>" ).addBr();
         return this;
     }
 
@@ -75,7 +84,16 @@ public class MailContentWriter
 
     public String getContent()
     {
-        return content.toString() + "</body></html>";
+        if ( onglet )
+        {
+            addHtml( "</div>" );
+            ongletContent.append( "</ul>" );
+        }
+        return "<html><body><script type=\"text/javascript\" language=\"javascript\">"
+            + "function display(idDisplay) {" + " if(document.getElementById(idDisplay).style.display == 'none'){"
+            + "   document.getElementById(idDisplay).style.display = 'block';" + "}else{"
+            + "    document.getElementById(idHide).style.display = 'none';}" + " }" + "</script>"
+            + ongletContent.toString() + content.toString() + "</body></html>";
     }
 
     /**
@@ -98,14 +116,18 @@ public class MailContentWriter
      * @param htmlTitle
      * @return
      */
-    public Block createBlock( String htmlTitle )
+    public Block createBlock()
     {
-        return new Block( htmlTitle );
+        return new Block();
+    }
+
+    public Block createBlock( String title )
+    {
+        return new Block( title );
     }
 
     public class Block
     {
-
 
         String title;
 
@@ -114,11 +136,23 @@ public class MailContentWriter
         /**
          * @param htmlTitle
          */
-        public Block( String htmlTitle )
+        public Block()
         {
-            title = htmlTitle;
         }
 
+        /**
+         * @param title2
+         */
+        public Block( String pTitle )
+        {
+            this.title = htmlTitle( pTitle );
+        }
+
+        public Block setHtmlTitle( String pTitle )
+        {
+            this.title = htmlTitle( pTitle );
+            return this;
+        }
 
         public Block add( String html )
         {
@@ -126,14 +160,12 @@ public class MailContentWriter
             return this;
         }
 
-
         /**
          * @return
          */
         public Block br()
         {
-            sb.append( BR );
-            return this;
+            return add( BR );
         }
 
         /**
@@ -155,6 +187,14 @@ public class MailContentWriter
             return sb.toString();
         }
 
+        /**
+         * @param string
+         * @return
+         */
+        public String htmlTitle( String pTitle )
+        {
+            return "<p><span style='font-size:12pt;color:#444444'><b>" + pTitle + "</b></span><p>";
+        }
 
     }
 

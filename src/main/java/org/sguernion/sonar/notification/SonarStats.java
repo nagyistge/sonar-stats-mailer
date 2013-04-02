@@ -79,6 +79,7 @@ public class SonarStats
             stat.project.testsGraph = props.getBoolean( "content.tests.graph" );
             stat.project.tests = props.getBoolean( "content.tests" );
             stat.project.violations = props.getBoolean( "content.violations" );
+            System.out.println( stat.project.toString() );
         }
         return stat;
     }
@@ -265,6 +266,7 @@ public class SonarStats
         catch ( Exception e )
         {
             e.printStackTrace();
+            System.out.println( "errorrrrr : " + e.getMessage() );
         }
         return this;
     }
@@ -273,10 +275,9 @@ public class SonarStats
      * @param sonnarS
      * @return
      */
-    protected void buildContent( ProjetConfiguration project )
+    protected void buildContent( ProjetConfiguration pProject )
     {
         int nbDays = props.getInt( SONAR_DAYS );
-
         String duree = "depuis la semaine dernière";
 
         if ( nbDays != 7 )
@@ -284,6 +285,7 @@ public class SonarStats
             duree = "depuis " + nbDays + " jours";
         }
 
+        this.project = pProject;
         project.index =
             sonar.find( ResourceQuery.createForMetrics( project.resource, new String[] {} ) ).getId().toString();
 
@@ -294,15 +296,15 @@ public class SonarStats
 
         TimeMachine timeM = getTimeMachine( project.resource, nbDays );
 
-        contentViolations( mailWriter, timeM );
+        contentViolations( timeM );
 
-        contentTests( mailWriter, timeM );
+        contentTests( timeM );
 
-        contentDuplications( mailWriter, timeM );
+        contentDuplications( timeM );
 
-        contentTestsGraph( mailWriter, duree );
+        contentTestsGraph( duree );
 
-        contentCoverage( mailWriter, duree );
+        contentCoverage( duree );
     }
 
     public String getContentHtml()
@@ -315,14 +317,16 @@ public class SonarStats
      * @param mailWriter
      * @param duree
      */
-    private void contentCoverage( MailContentWriter mailWriter, String duree )
+    private void contentCoverage( String duree )
     {
+        System.out.println( "contentCoverage : " + project.coverage );
         if ( project.coverage )
         {
             mailWriter.addBr().addHtml( "<p>Evolution de la couverture de tests " + duree + ".</p>" );
             mailWriter.addBr().addImage(
                 HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
                     + "/cobertura/graph" );
+            System.out.println( "contentCoverage done " );
         }
     }
 
@@ -330,14 +334,17 @@ public class SonarStats
      * @param mailWriter
      * @param duree
      */
-    private void contentTestsGraph( MailContentWriter mailWriter, String duree )
+    private void contentTestsGraph( String duree )
     {
+        System.out.println( "contentTestsGraph : " + project.testsGraph );
         if ( project.testsGraph )
         {
             mailWriter.addHtml( "<p>Tendance des résultats des tests " + duree + ".</p>" );
             mailWriter.addBr().addImage(
                 HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
                     + "/test/trend" );
+
+            System.out.println( "contentTestsGraph done " );
         }
     }
 
@@ -345,23 +352,25 @@ public class SonarStats
      * @param mailWriter
      * @param timeM
      */
-    private void contentDuplications( MailContentWriter mailWriter, TimeMachine timeM )
+    private void contentDuplications( TimeMachine timeM )
     {
+        System.out.println( "contentDuplications : " + project.duplications );
         if ( project.duplications )
         {
-            Block blockComment = mailWriter.createBlock( getHtmlTitle( "Commentaires" ) );
+            Block blockComment = mailWriter.createBlock( "Commentaires" );
             blockComment.add( getLigne( timeM, "comment_lines_density", "", true ) ).br();
             blockComment.add( getLigne( timeM, "comment_lines", " lignes", true ) ).br();
             blockComment.add( getLigne( timeM, "public_documented_api_density", " API documentée", true ) ).br();
             blockComment.add( getLigne( timeM, "public_undocumented_api", " API non documentée" ) ).br();
 
-            Block block = mailWriter.createBlock( getHtmlTitle( "Duplications" ) );
+            Block block = mailWriter.createBlock( "Duplications" );
             block.add( getLigne( timeM, "duplicated_lines_density", "" ) ).br();
             block.add( getLigne( timeM, "duplicated_lines", " lignes" ) ).br();
             block.add( getLigne( timeM, "duplicated_blocks", " blocs" ) ).br();
             block.add( getLigne( timeM, "duplicated_files", " fichiers", true ) ).br();
 
             mailWriter.addBlock( blockComment, block );
+            System.out.println( "contentDuplications done " );
         }
     }
 
@@ -369,24 +378,26 @@ public class SonarStats
      * @param mailWriter
      * @param timeM
      */
-    private void contentTests( MailContentWriter mailWriter, TimeMachine timeM )
+    private void contentTests( TimeMachine timeM )
     {
+        System.out.println( "contentTests : " + project.tests );
         if ( project.tests )
         {
-            Block blockCouverture = mailWriter.createBlock( getHtmlTitle( "Couverture de code" ) );
+            Block blockCouverture = mailWriter.createBlock( "Couverture de code" );
             blockCouverture.add( getLigne( timeM, "coverage", "", true ) ).br();
             blockCouverture.add( getLigne( timeM, "line_coverage", " de couverture de ligne", true ) ).br();
             blockCouverture.add( getLigne( timeM, "branch_coverage", " de couverture de branche", true ) ).br();
 
-            Block blockTests = mailWriter.createBlock( getHtmlTitle( "Succès d'exécution des tests" ) );
+            Block blockTests = mailWriter.createBlock( "Succès d'exécution des tests" );
             blockTests.add( getLigne( timeM, "test_success_density", "", true ) ).br();
             blockTests.add( getLigne( timeM, "test_failures", " en échec" ) ).br();
             blockTests.add( getLigne( timeM, "test_errors", " en erreur" ) ).br();
             blockTests.add( getLigne( timeM, "tests", " tests", true ) ).br();
             blockTests.add( getLigne( timeM, "skipped_tests", " tests désactivés", true ) ).br();
-            blockTests.add( getLigne( timeM, "test_execution_time", "", true, Format.TIME ) ).br().br();
+            blockTests.add( getLigne( timeM, "test_execution_time", "", true, Format.TIME ) ).br();
 
             mailWriter.addBlock( blockCouverture, blockTests );
+            System.out.println( "contentTests done " );
         }
     }
 
@@ -394,17 +405,18 @@ public class SonarStats
      * @param mailWriter
      * @param timeM
      */
-    private void contentViolations( MailContentWriter mailWriter, TimeMachine timeM )
+    private void contentViolations( TimeMachine timeM )
     {
+        System.out.println( "contentViolations : " + project.violations );
         if ( project.violations )
         {
-            Block blockViolation = mailWriter.createBlock( getHtmlTitle( "Violations" ) );
+            Block blockViolation = mailWriter.createBlock( "Violations" );
 
             blockViolation.add( getLigne( timeM, "violations", "" ) );
-            blockViolation.add( getHtmlTitle( "Taux de conformité" ) );
+            blockViolation.add( blockViolation.htmlTitle( "Taux de conformité" ) );
             blockViolation.add( getLigne( timeM, "violations_density", "" ) ).br();
 
-            Block blockViolationL2 = mailWriter.createBlock( "" );
+            Block blockViolationL2 = mailWriter.createBlock();
             blockViolationL2.add( getLigne( timeM, "blocker_violations", " Bloquant" ) ).br();
             blockViolationL2.add( getLigne( timeM, "critical_violations", " Critique" ) ).br();
             blockViolationL2.add( getLigne( timeM, "major_violations", " Majeur" ) ).br();
@@ -412,6 +424,8 @@ public class SonarStats
             blockViolationL2.add( getLigne( timeM, "info_violations", " Info" ) ).br();
 
             mailWriter.addBlock( blockViolation, blockViolationL2 );
+
+            System.out.println( "contentViolations done " );
         }
     }
 
@@ -433,16 +447,6 @@ public class SonarStats
     private String getLigne( TimeMachine timeM, String key, String text, boolean negativeIndice, Format format )
     {
         return getFormattedValue( key ) + text + getCellValDeltaHtml( timeM, key, negativeIndice, format );
-    }
-
-    /**
-     * @param string
-     * @return
-     */
-    private String getHtmlTitle( String title )
-    {
-        MailContentWriter mailWriter = new MailContentWriter();
-        return mailWriter.getHtmlTitle( title );
     }
 
     private Object getCellVal( TimeMachine timeM, String key, int index )

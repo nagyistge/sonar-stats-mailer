@@ -44,6 +44,7 @@ public class SonarMultiStats
             project.tests = props.getStringArray( "content.tests" )[i].equals( "true" );
             project.violations = props.getStringArray( "content.violations" )[i].equals( "true" );
             projects.add( project );
+            System.out.println( project.toString() );
         }
         return stats;
     }
@@ -56,12 +57,14 @@ public class SonarMultiStats
     @Override
     public String getContentHtml()
     {
+
         for ( ProjetConfiguration pProject : projects )
         {
+            mailWriter.addHtml( pProject.job );
             sonar =
                 Sonar.create( HTTP + props.getString( SONAR_HOST ) + SEP + props.getString( SONAR_PORT ),
                     props.getString( SONAR_USER ), props.getString( SONAR_PASSWORD ) );
-            this.project = pProject;
+            mailWriter.addOnglet( pProject.job );
             buildContent( pProject );
             mailWriter.addBr().addBr();
         }
