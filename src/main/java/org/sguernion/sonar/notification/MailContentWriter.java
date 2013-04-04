@@ -1,5 +1,7 @@
 package org.sguernion.sonar.notification;
 
+import java.io.UnsupportedEncodingException;
+
 /**
  * @author sguernio
  */
@@ -13,6 +15,10 @@ public class MailContentWriter
     private StringBuilder ongletContent;
 
     private static final String BR = "<br />";
+
+    private static String STYLE = "<style type='text/css'>.menu, .menu table{line-height : 31px;text-align : center;}"
+        + ".menu a{text-decoration : none;color : #fff;}"
+        + ".menu tr{ border-right : 2px solid #fff;background-color : #000;}" + "</style>";
 
     /**
      * 
@@ -32,17 +38,22 @@ public class MailContentWriter
         if ( !onglet )
         {
             // TODO init onglet
-            ongletContent.append( "<ul>" );
+            ongletContent
+                .append( "<table style='width:700px;border:1px solid black;background-color : #FFF;' class='menu'><tr>" );
             onglet = true;
         }
         else
         {
             addHtml( "</div>" );
         }
-        ongletContent.append( "<li onclick='display(" + job + ")'>" );
+        ongletContent.append( "<td><a href='#" + job + "' >" );
         ongletContent.append( job );
-        ongletContent.append( "</li>" );
-        addHtml( "<div id='" + job + "' style='display:none;'>" );
+        ongletContent.append( "</a></td>" );
+
+        addHtml(
+            "<br/><div style='width:700px;border:1px solid black;text-align: center;background-color : #FFF;'  >_ONGLET_<a name='"
+                + job + "'></a>" ).addBr();
+        addHtml( job );
         // TODO onglet
 
         return this;
@@ -54,7 +65,7 @@ public class MailContentWriter
      */
     public MailContentWriter addBlock( String text1, String text2 )
     {
-        addHtml( "<table style='width:700px;border:1px solid black'><tr><td>" );
+        addHtml( "<table style='width:700px;border:1px solid black;background-color : #FFF;'><tr><td>" );
         addHtml( text1 ).addHtml( "</td><td>" );
         addHtml( text2 ).addHtml( "</tr></table>" );
         addBr();
@@ -87,13 +98,24 @@ public class MailContentWriter
         if ( onglet )
         {
             addHtml( "</div>" );
-            ongletContent.append( "</ul>" );
+            ongletContent.append( "</tr></table>" );
         }
-        return "<html><body><script type=\"text/javascript\" language=\"javascript\">"
-            + "function display(idDisplay) {" + " if(document.getElementById(idDisplay).style.display == 'none'){"
-            + "   document.getElementById(idDisplay).style.display = 'block';" + "}else{"
-            + "    document.getElementById(idHide).style.display = 'none';}" + " }" + "</script>"
-            + ongletContent.toString() + content.toString() + "</body></html>";
+
+        String sContent = content.toString();
+        sContent = sContent.replace( "_ONGLET_", ongletContent.toString() );
+
+        String result =
+            "<html><head><meta http-equiv='Content-Type' content='text/html; charset=iso-8859-1'/>" + STYLE
+                + "</head><body>" + sContent + "</body></html>";
+
+        try
+        {
+            return new String( result.getBytes(), "iso-8859-1" );
+        }
+        catch ( UnsupportedEncodingException e )
+        {
+            return result;
+        }
     }
 
     /**
@@ -118,7 +140,7 @@ public class MailContentWriter
      */
     public Block createBlock()
     {
-        return new Block();
+        return new Block( "" );
     }
 
     public Block createBlock( String title )

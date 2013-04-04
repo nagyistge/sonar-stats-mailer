@@ -79,9 +79,24 @@ public class SonarStats
             stat.project.testsGraph = props.getBoolean( "content.tests.graph" );
             stat.project.tests = props.getBoolean( "content.tests" );
             stat.project.violations = props.getBoolean( "content.violations" );
-            System.out.println( stat.project.toString() );
+            stat.project.resource = ressources[0];
+            stat.project.index =
+                stat.sonar.find( ResourceQuery.createForMetrics( stat.project.resource, new String[] {} ) ).getId()
+                    .toString();
+            stat.project.jobUrl =
+                HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/"
+                    + stat.project.job;
+            stat.project.sonarLink =
+                HTTP + props.getString( SONAR_HOST ) + SEP + props.getString( SONAR_PORT ) + "/dashboard/index/"
+                    + stat.project.index;
+            // System.out.println( stat.project.toString() );
         }
         return stat;
+    }
+
+    public void getJenkinsStates()
+    {
+        String jsonUrl = project.jobUrl + "/api/json?";
     }
 
     /**
@@ -289,9 +304,8 @@ public class SonarStats
         project.index =
             sonar.find( ResourceQuery.createForMetrics( project.resource, new String[] {} ) ).getId().toString();
 
-        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + HTTP + props.getString( SONAR_HOST ) + SEP
-            + props.getString( SONAR_PORT ) + "/dashboard/index/" + project.index + "?did=1\">Sonar</a> " + duree
-            + ".</p>" );
+        mailWriter.addHtml( "<p>Voici quelques indicateurs <a href=\"" + project.sonarLink
+            + "?did=1\" style='text-decoration : none;'>Sonar</a> " + duree + ".</p>" );
         mailWriter.addBr();
 
         TimeMachine timeM = getTimeMachine( project.resource, nbDays );
@@ -319,14 +333,10 @@ public class SonarStats
      */
     private void contentCoverage( String duree )
     {
-        System.out.println( "contentCoverage : " + project.coverage );
         if ( project.coverage )
         {
             mailWriter.addBr().addHtml( "<p>Evolution de la couverture de tests " + duree + ".</p>" );
-            mailWriter.addBr().addImage(
-                HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
-                    + "/cobertura/graph" );
-            System.out.println( "contentCoverage done " );
+            mailWriter.addBr().addImage( project.jobUrl + "/cobertura/graph" );
         }
     }
 
@@ -336,15 +346,10 @@ public class SonarStats
      */
     private void contentTestsGraph( String duree )
     {
-        System.out.println( "contentTestsGraph : " + project.testsGraph );
         if ( project.testsGraph )
         {
             mailWriter.addHtml( "<p>Tendance des résultats des tests " + duree + ".</p>" );
-            mailWriter.addBr().addImage(
-                HTTP + props.getString( JENKINS_HOST ) + SEP + props.getString( JENKINS_PORT ) + "/job/" + project.job
-                    + "/test/trend" );
-
-            System.out.println( "contentTestsGraph done " );
+            mailWriter.addBr().addImage( project.jobUrl + "/test/trend" );
         }
     }
 
@@ -354,7 +359,6 @@ public class SonarStats
      */
     private void contentDuplications( TimeMachine timeM )
     {
-        System.out.println( "contentDuplications : " + project.duplications );
         if ( project.duplications )
         {
             Block blockComment = mailWriter.createBlock( "Commentaires" );
@@ -370,7 +374,6 @@ public class SonarStats
             block.add( getLigne( timeM, "duplicated_files", " fichiers", true ) ).br();
 
             mailWriter.addBlock( blockComment, block );
-            System.out.println( "contentDuplications done " );
         }
     }
 
@@ -380,7 +383,6 @@ public class SonarStats
      */
     private void contentTests( TimeMachine timeM )
     {
-        System.out.println( "contentTests : " + project.tests );
         if ( project.tests )
         {
             Block blockCouverture = mailWriter.createBlock( "Couverture de code" );
@@ -394,10 +396,9 @@ public class SonarStats
             blockTests.add( getLigne( timeM, "test_errors", " en erreur" ) ).br();
             blockTests.add( getLigne( timeM, "tests", " tests", true ) ).br();
             blockTests.add( getLigne( timeM, "skipped_tests", " tests désactivés", true ) ).br();
-            blockTests.add( getLigne( timeM, "test_execution_time", "", true, Format.TIME ) ).br();
+            blockTests.add( getLigne( timeM, "test_execution_time", "", false, Format.TIME ) ).br();
 
             mailWriter.addBlock( blockCouverture, blockTests );
-            System.out.println( "contentTests done " );
         }
     }
 
@@ -407,7 +408,6 @@ public class SonarStats
      */
     private void contentViolations( TimeMachine timeM )
     {
-        System.out.println( "contentViolations : " + project.violations );
         if ( project.violations )
         {
             Block blockViolation = mailWriter.createBlock( "Violations" );
@@ -424,8 +424,6 @@ public class SonarStats
             blockViolationL2.add( getLigne( timeM, "info_violations", " Info" ) ).br();
 
             mailWriter.addBlock( blockViolation, blockViolationL2 );
-
-            System.out.println( "contentViolations done " );
         }
     }
 
@@ -452,7 +450,8 @@ public class SonarStats
     private Object getCellVal( TimeMachine timeM, String key, int index )
     {
         TimeMachineColumn coll = timeM.getColumn( key );
-        if ( coll != null )
+        if ( coll != null && index != -1 && timeM.getCells().length > index
+            && timeM.getCells()[index].getValues().length > coll.getIndex() )
         {
             return timeM.getCells()[index].getValues()[coll.getIndex()];
         }
@@ -471,7 +470,7 @@ public class SonarStats
     private String getCellValDeltaHtml( TimeMachine timeM, String key, boolean negativeResult, Format format )
     {
         String val = getCellValDelta( timeM, key );
-        String pre = "<span style=\"valign: super; line-height: 80%;\" ><b> (";
+        String pre = "<span style=\"color:#8C8989;valign: super; line-height: 80%;\" ><b> (";
         String after = ") </b></span>";
         String signe = "-";
 

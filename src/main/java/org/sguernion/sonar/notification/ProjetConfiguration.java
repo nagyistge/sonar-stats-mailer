@@ -22,6 +22,10 @@ public class ProjetConfiguration
 
     protected String job;
 
+    protected String jobUrl;
+
+    protected String sonarLink;
+
     /**
      * {@inheritDoc}
      * 
